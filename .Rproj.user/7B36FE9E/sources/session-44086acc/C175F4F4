@@ -1,0 +1,26 @@
+{
+    "id": "C175F4F4",
+    "path": "~/Dropbox/Mediation/MSQM/R package/msqm/R/functions.R",
+    "project_path": "R/functions.R",
+    "type": "r_source",
+    "hash": "2799622178",
+    "contents": "",
+    "dirty": false,
+    "created": 1714099296139.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "813,15",
+        "scrollLine": "803"
+    },
+    "folds": "4|53|235|0|\n242|27|267|0|\n271|39|280|0|\n285|89|373|0|\n380|67|432|0|\n439|65|555|0|\n",
+    "lastKnownWriteTime": 1714160961,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1714160962002,
+    "read_only": false,
+    "read_only_alternatives": []
+}

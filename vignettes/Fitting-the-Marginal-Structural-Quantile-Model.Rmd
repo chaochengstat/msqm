@@ -1,0 +1,166 @@
+---
+title: "Doubly Robust Estimation for Marginal Structural Quantile Models"
+author: "Chao Cheng"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Doubly Robust Estimation for Marginal Structural Quantile Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+## Introduction
+
+This vignette demonstrates the use of the R-package `msqm` to fit the marginal structural quantile model, based on the inverse probability weighting (IPW) approach, the iterative conditional regression (ICR) approach, and the doubly robust (DR) estimator. We shall follow the methodology in Cheng et al (2022). 
+
+## Marginal Structual Quantile Model (MSQM)
+
+Consider a longitudinal study with $K\geq 2$ time periods. For each time period $k\in\{1,\dots,K\}$, we observe a binary treatment $A_k\in\{0,1\}$ and a vector of baseline covariates $\mathbf{L}_k$ at the beginning of the k-th period. We consider that a final outcome $Y$ is observed at the end of the $K$-th period. There observed data is therefore $\mathbf{O}=\{\mathbf{L}_1,A_1,\dots,\mathbf{L}_K,A_K,Y\}$. Define $Y_{\bar a_K}$ as the potential outcome of $Y$ under treatment history $\bar a_K = [a_1,a_2,\dots,a_K]$. We are interested in the MSQM concerning the $q$-th lower quantile of $Y_{\bar a_K}$ conditional on a subset of baseline covariates $\mathbf{Z}\in \mathbf{L}_1$, $Q_{Y_{\bar a_K}|\mathbf{Z}}^{(q)}$:
+$$
+Q_{Y_{\bar a_K}|\mathbf{Z}}^{(q)}=h(\bar a_K,\mathbf{Z}_K;\mathbf{\theta}_q),
+$$ 
+where $\mathbf{\theta}_q$ is the coefficients of interest, $h$ is a user-specified function. In this package, we focus on a linear representation of MSQM such that 
+$$
+h(\bar a_K,\mathbf{Z}_K;\mathbf{\theta}_q) =  \mathbf{\theta}_q^T\mathbf{B}(\bar a_K,\mathbf{Z}),
+$$
+where $\mathbf{B}(\bar a_K,\mathbf{Z})$ is a design matrix of $\{\bar a_K,\mathbf{Z}\}$. For example, if we set $\mathbf{B}(\bar a_K,\mathbf{Z})=[a_1,\dots,a_K,\mathbf{Z}^T]^T$, then $h(\bar a_K,\mathbf{Z}_K;\mathbf{\theta}_q)=\theta_{0q}+\sum_{k=1}^K\theta_{kq}a_k+\theta_{zq}^T\mathbf{Z}$. 
+
+## Specification of the nuisance models
+
+Define $\bar A_k=\{A_1,A_2,\dots,A_k\}$ as the treatment history before $k$-th period and $\underline A_k=\{A_k,A_{k+1},\dots,A_{K}\}$ as the treatment history from the $k$-th period onward to the $K$-th period. We similarly define $\bar{\mathbf L}_k$ and $\underline{\mathbf L}_k$. To estimate the MSQM, we consider two sets of nuisance models, the propensity score models for the treatment mechanism and the outcome models for the outcome mechanism. Specifically, we consider the following logistic working models for the longitudinal propensity scores:
+
+| Time period        | logistic model for propensity scores         | 
+|:-------------:|:-------------:|
+| 1     | $P(A_1=1|\mathbf{L}_1)=\text{logit}\left\{\alpha_1^T \Gamma_1(\mathbf{L}_1)\right\}$ | 
+| 2      | $P(A_2=1|A_1,\overline{\mathbf{L}}_2)=\text{logit}\left\{\alpha_2^T \Gamma_2(A_1,\overline{\mathbf{L}}_2)\right\}$     |
+| $\dots$      | $\dots$      |
+| k      | $P(A_k=1|\overline{A}_{k-1},\overline{\mathbf{L}}_k)=\text{logit}\left\{\alpha_k^T \Gamma_k(\overline{A}_{k-1},\overline{\mathbf{L}}_k)\right\}$     |
+| $\dots$      | $\dots$      |
+| K      | $P(A_K=1|\overline{A}_{K-1},\overline{\mathbf{L}}_K)=\text{logit}\left\{\alpha_K^T \Gamma_K(\overline{A}_{K-1},\overline{\mathbf{L}}_K)\right\}$     |
+
+Here, $\{\Gamma_1(\mathbf{L}_1),\dots,\Gamma_K(\overline{A}_{K-1},\overline{\mathbf{L}}_K)\}$ are design matrices for the logistic regressions. For the outcome process, we consider using a sequence of Gaussian linear regressions:
+
+| Time period        | linear regression for outcome process         | 
+|:-------------:|:-------------:|
+| 1     | $Y_{A_1,\underline a_2}|A_1,\mathbf{L}_1\sim N\left(\beta_1^T H_1(A_1,\underline a_2,\mathbf{L}_1),e^{\gamma_1^T R_1(A_1,\underline a_2,\mathbf{L}_1)}\right)$ | 
+| 2      | $Y_{\bar A_2,\underline a_3}|\bar A_2,\overline{\mathbf{L}}_2\sim N\left(\beta_2^T H_2(\bar A_2,\underline a_3,\overline{\mathbf{L}}_2),e^{\gamma_2^T R_2(\bar A_2,\underline a_3, \underline a_2,\overline{\mathbf{L}}_2)}\right)$     |
+| $\dots$      | $\dots$      |
+| k      | $Y_{\overline A_k,\underline a_{k+1}}|\overline A_k,\overline{\mathbf{L}}_k\sim N\left(\beta_k^T H_k(\overline A_k,\underline a_{k+1},\overline{\mathbf{L}}_2),e^{\gamma_k^T R_k(\overline A_k,\underline a_{k+1},\overline{\mathbf{L}}_2)}\right)$     |
+| $\dots$      | $\dots$      |
+| K      | $Y_{\overline A_K}|\overline A_K,\overline{\mathbf{L}}_K\sim N\left(\beta_K^T H_K(\overline A_K,\overline{\mathbf{L}}_K),e^{\gamma_k^T R_K(\overline A_K,\overline{\mathbf{L}}_K)}\right)$     |
+
+Here, $\{H_1(A_1,\underline a_2,\mathbf{L}_1),\dots,H_K(\overline A_K,\overline{\mathbf{L}}_K)\}$ and $\{R_1(A_1,\underline a_2,\mathbf{L}_1),\dots,R_K(\overline A_K,\overline{\mathbf{L}}_K)\}$ are design matrices for the mean and variance structures, respectively. 
+
+## Basic Syntax
+
+The data-fitting function is `msqm.fit`, which provide point and variance estimation of the MSQM based on three approaches: (i) the IPW approach, (ii) the ICR approach, and (iii) the DR approach. The IPW and ICR only require specification of the propensity scores and outcome regressions, respectively. The DR requires specification of both, but provides additional protection against model misspecification such that it is consistent if either the logistic model for the propensity scores or the Gaussian linear regression for the outcome is correctly specified. For the IPW and DR approaches, we consider using the smoothed estimating equation to facilitate estimation and inference. We can call `msqm.fit` by
+
+`msqm.fit(data, q, PS.formula, S.formula, Outcome.formula, Var.formula, MSQM.formula, A.names, Outcome.name)`
+
+We require input the following arguments:
+
+* `data`: a `data.frame` data set
+* `q`: the desired lower quantile
+* `PS.formula`: a list of formulas for the propensity score models in time periods $k=1,2,\dots,K$.
+* `S.formula`: a list of formulas for stabilized weights in time periods $k=1,2,\dots,K$ (see our illustration example for more details).
+* `Outcome.formula`: a list of formulas for mean structure of the outcome model in time periods $k=1,2,\dots,K$.
+* `Var.formula`: a list of formulas for variance structure of the outcome model in time periods $k=1,2,\dots,K$.
+* `A.names`: the column names of the treatment from period 1 to period $K$
+* `Outcome.names`:	the column name of the outcome (measured at the end of period $K$)
+
+The output of `msqm.fit` includes the point, standard error, and 95% Wald-type confidence interval of the MSQM coefficents, where the standard error is estimated based on the derived asymptotic variance.  Below, we illustarate usage of this function based on a simulated dataset.
+
+## An Illustrative Example
+
+Please library the `msqm` package if needed.
+```{r setup}
+library(msqm)
+```
+
+
+#### Data illustration
+
+We first simulate a data with $K=3$ time periods with $n=500$ individuals.
+
+```{r}
+set.seed(12345)
+data=data.gen(n=500)
+head(round(data,2))
+```
+As shown here, `{X11,X12}` are baseline covariates (i.e., $\mathbf{L}_1$), `A1` is treatment 1, `{X21,X22}` are covariates at the beginning of period 2 (i.e., $\mathbf{L}_2$), `A2` is treatment 2, `{X31,X32}` are covariates at the beginning of period 3 (i.e., $\mathbf{L}_3$), `A3` is treatment 3, `Y` is the outcome of interest. 
+
+#### Specification of the MSQM
+
+We are interested in the following MSQM for the median of $Y_{\bar a_3}$: $h(\bar a_3;\mathbf{\theta}_{0.5})=\theta_{0,0.5}+\theta_{1,0.5}a_1 + \theta_{2,0.5}a_2+\theta_{3,0.5}a_3$. Therefore, we specify the following formula for the MSQM
+
+```{r}
+MSQM.formula=as.formula(Y~A1+A2+A3) # the MSQM model
+q=0.5 # the desired quantile of interest (median here)
+A.names=c("A1","A2","A3") # treatment variables
+Outcome.name="Y" # outcome variable
+```
+
+#### Specification of the propensity score models
+
+For the design matrix in the propensity score models, we consider $\Gamma_1(\mathbf{L}_1)=\mathbf{L}_1$, $\Gamma_2(A_1,\overline{\mathbf{L}}_2)=[A_1,\mathbf{L}_2^T]^T$, $\Gamma_3(\overline A_2,\overline{\mathbf{L}}_3)=[A_2,\mathbf{L}_3^T]^T$. Therefore we have
+```{r}
+PS.formula=list(as.formula(A1~X11+X12),
+                as.formula(A2~A1+X21+X22),
+                as.formula(A3~A2+X31+X32))
+```
+
+Moreover, sometimes we wish to use a stabilized weight in order to stabilize the finite-sample performance of the IPW and DR estimators. Such stabilized weight is achieved by fitting logistic working model for $K$ longitudinal probabilities $\{P(A_k=1|\bar A_{k-1},\mathbf{Z}),k=1\dots,K\}$. An example specification of these stablized weight is assuming $P(A_k=1|\bar A_{k-1},\mathbf{Z})=\zeta_k^T[A_{k-1},\mathbf{Z}^T]^T$, for $k=1\dots,K$. In our MSQM, we set $\mathbf{Z}$ as empty, so we can specify the stabilized weight by setting
+```{r}
+S.formula=list(as.formula(A1~1),
+               as.formula(A2~A1),
+               as.formula(A3~A2))
+```
+
+
+#### Specification of the outcome models
+
+For the mean structure, we assume $H_1(A_1,\underline a_2,\mathbf{L}_1)=[A_1,a_2,a_3,\mathbf{L}_1^T]^T$, $H_2(\overline A_2,a_3,\overline{\mathbf{L}}_2)=[A_1,A_2,a_3,\mathbf{L}_1^T,\mathbf{L}_2^T]^T$, and $H_3(\overline A_3,\overline{\mathbf{L}}_3)=[A_1,A_2,A_3,\mathbf{L}_1^T,\mathbf{L}_2^T,\mathbf{L}_3^T]^T$. Therefore, we set `Outcome.formula` as
+```{r}
+Outcome.formula=list(as.formula(Y~A1+A2+A3+X11+X12),
+                     as.formula(Y~A1+A2+A3+X11+X12+X21+X22),
+                     as.formula(Y~A1+A2+A3+X11+X12+X21+X22+X31+X32))
+```
+For the variance structure, we assume $R_1(A_1,\underline a_2,\mathbf{L}_1)=[A_1,a_2,a_3]^T$, $R_2(\overline A_2,a_3)=[A_1,A_2,a_3]^T$, and $R_3(\overline A_3,\overline{\mathbf{L}}_3)=[A_1,A_2,A_3]^T$.  Therefore, we set `Var.formula` as
+```{r}
+Var.formula =list(as.formula(~A1+A2+A3),
+                  as.formula(~A1+A2+A3),
+                  as.formula(~A1+A2+A3))
+```
+
+#### Fit the MSQM
+
+We can fit the MSQM by running the following code:
+```{r}
+obj = msqm.fit(data,q,PS.formula,S.formula,Outcome.formula,Var.formula,
+               MSQM.formula,A.names,Outcome.name)
+```
+
+Below, we provide the point, standard error, and 95\% confidence interval of the MSQM coefficients $\{\theta_{0,0.5},\theta_{1,0.5},\theta_{2,0.5},\theta_{3,0.5}\}$:
+```{r}
+obj$MSQM_coef
+```
+
+We can also extract the variance-covariance matrix of the MSQM coeffients:
+```{r}
+obj$MSQM_vcov
+```
+
+
+## References
+
+* Cheng, C., Hu, L., & Li, F. (2022). Doubly robust estimation and sensitivity analysis for marginal structural quantile models. **arXiv preprint arXiv:2210.04100** (accepted by Biometrics).
+
+* Hogan, J. W., & Lee, J. Y. (2004). Marginal structural quantile models for longitudinal observational studies with time-varying treatment. **Statistica Sinica**, 927-944.
+
